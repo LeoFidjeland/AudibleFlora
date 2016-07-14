@@ -19,8 +19,9 @@
 #include <Sample.h> // Sample template
 #include "kluck.h"
 #include <EventDelay.h>
+#include <mozzi_rand.h>
 
-#define CONTROL_RATE 500
+#define CONTROL_RATE 128
 
 int trigPin = 4;
 int echoPin = 2;
@@ -29,7 +30,14 @@ double minCM = 10.0;
 double maxCM = 250.0;
 long startTime = 0;
 long endTime = 0;
+double lastCm = 0.0;
 volatile double cm = 0.0;
+
+const float playspeed = 4.3;
+float playspeedmod = 0;
+float speedchange = 0;
+
+const unsigned int full = (int) (1000.f/playspeed) - 23; // adjustment approx for CONTROL_RATE difference
 
 // use: Sample <table_size, update_rate> SampleName (wavetable)
 Sample <kluck_NUM_CELLS, AUDIO_RATE> aSample(kluck_DATA);
@@ -45,37 +53,71 @@ long measureTime = 0;
 
 void setup(){
   Serial.begin(9600);
-  while (!Serial.available()) {
-    Serial.println("Press any key to start.");
-    delay (1000);
-  }
-  Serial.println("Starting");
-  startMozzi(CONTROL_RATE);
-  aSample.setFreq((float) kluck_SAMPLERATE / (float) kluck_NUM_CELLS); // play at the speed it was recorded
-//  aSample.setLoopingOn();
+//  while (!Serial.available()) {
+//    Serial.println("Press any key to start.");
+//    delay (1000);
+//  }
+//  Serial.println("Starting");
+
+  // Setup ultrasound ISR
   pinMode(trigPin,OUTPUT);
   pinMode(echoPin,INPUT);
   attachInterrupt(digitalPinToInterrupt(echoPin), echoISR, CHANGE);
-  kTriggerDelay.set(600); // 1500 msec countdown, within resolution of CONTROL_RATE
   triggerDelay.set(64);
   outputDelay.set(200);
+
+  // Setup Mozzi
+  randSeed(); // reseed the random generator for different results each time the sketch runs
+  aSample.setFreq(playspeed*((float) kluck_SAMPLERATE / (float) kluck_NUM_CELLS));
+  aSample.setLoopingOn();
+  kTriggerDelay.set(full);
+//  kTriggerDelay.set(600); // 1500 msec countdown, within resolution of CONTROL_RATE
+  startMozzi(CONTROL_RATE);
 }
+
+void chooseSpeedMod(){
+  double cmChange = 0;
+  if(cm != -1){
+    cmChange = lastCm - cm;
+    lastCm = cm; 
+  }
+  cmChange = cmChange / 10;
+  Serial.println(cmChange);
+  playspeedmod = playspeed + cmChange;
+  
+  
+//  if (rand((byte)1) == 0){
+    speedchange = (float)rand((char)-100,(char)100)/8000;
+//    Serial.println(speedchange);
+//    float startspeed = (float)rand((char)-100,(char)100)/100;
+//    Serial.println(startspeed);
+//    Serial.println();
+//    playspeedmod = playspeed + startspeed;
+//  }
+//  else{
+//    speedchange = 0;
+//    playspeedmod = playspeed;
+//  }
+}
+
 
 
 void updateControl(){
   if(kTriggerDelay.ready()){
-    aSample.start();
+    chooseSpeedMod();
     kTriggerDelay.start();
   }else if (outputDelay.ready()){
     digitalWrite(trigPin, HIGH);
     triggerDelay.start();
 //    Serial.println(startTime);
 //    Serial.println(endTime);
-    Serial.println(cm);
+//    Serial.println(cm);
     outputDelay.start();
   }else if (triggerDelay.ready()){
     digitalWrite(trigPin, LOW);
   }
+  playspeedmod += speedchange;
+  aSample.setFreq(playspeedmod);
 }
 
 
@@ -96,8 +138,9 @@ void echoISR(){
     double distance = duration / 29.0 / 2.0;
     if (distance < minCM || distance > maxCM){
       cm = -1.0;
+    }else{
+      cm = distance;
     }
-    cm = distance;
 //    detachInterrupt(digitalPinToInterrupt(echoPin));
   }
 }
