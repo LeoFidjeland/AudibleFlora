@@ -20,6 +20,7 @@
 #include "kluck.h"
 #include <EventDelay.h>
 #include <mozzi_rand.h>
+#include <StateVariable.h>
 
 #define CONTROL_RATE 128
 
@@ -33,7 +34,11 @@ long endTime = 0;
 double lastCm = 0.0;
 volatile double cm = 0.0;
 
-const float playspeed = 4.3;
+//FILTER//
+StateVariable <LOWPASS> svf; //möjliga filtertyper: LOWPASS/HIGHPASS/BANDPASS/NOTCH
+
+
+const float playspeed = 4.0;
 float playspeedmod = 0;
 float speedchange = 0;
 
@@ -52,7 +57,7 @@ EventDelay outputDelay;
 long measureTime = 0;
 
 void setup(){
-  Serial.begin(9600);
+//  Serial.begin(9600);
 //  while (!Serial.available()) {
 //    Serial.println("Press any key to start.");
 //    delay (1000);
@@ -70,9 +75,11 @@ void setup(){
   randSeed(); // reseed the random generator for different results each time the sketch runs
   aSample.setFreq(playspeed*((float) kluck_SAMPLERATE / (float) kluck_NUM_CELLS));
   aSample.setLoopingOn();
-  kTriggerDelay.set(full);
-//  kTriggerDelay.set(600); // 1500 msec countdown, within resolution of CONTROL_RATE
+//  kTriggerDelay.set(full);
+  kTriggerDelay.set(100); // 1500 msec countdown, within resolution of CONTROL_RATE
   startMozzi(CONTROL_RATE);
+  svf.setResonance(200);
+  svf.setCentreFreq(400);
 }
 
 void chooseSpeedMod(){
@@ -82,12 +89,12 @@ void chooseSpeedMod(){
     lastCm = cm; 
   }
   cmChange = cmChange / 10;
-  Serial.println(cmChange);
+//  Serial.println(cmChange);
   playspeedmod = playspeed + cmChange;
   
   
 //  if (rand((byte)1) == 0){
-    speedchange = (float)rand((char)-100,(char)100)/8000;
+    speedchange = (float)rand((char)-100,(char)100)/800;
 //    Serial.println(speedchange);
 //    float startspeed = (float)rand((char)-100,(char)100)/100;
 //    Serial.println(startspeed);
@@ -98,6 +105,7 @@ void chooseSpeedMod(){
 //    speedchange = 0;
 //    playspeedmod = playspeed;
 //  }
+//  Serial.println(speedchange);
 }
 
 
@@ -117,12 +125,14 @@ void updateControl(){
     digitalWrite(trigPin, LOW);
   }
   playspeedmod += speedchange;
+//  Serial.println(playspeedmod);
   aSample.setFreq(playspeedmod);
+  
 }
 
 
 int updateAudio(){
-  return (int) aSample.next();
+  return (int) svf.next(aSample.next());
 }
 
 void loop(){
