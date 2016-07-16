@@ -42,8 +42,10 @@ EventDelay measurementDelay;
 EventDelay triggerDelay;
 EventDelay twitchDelay;
 EventDelay twitchTimer;
+EventDelay silentDelay;
 
 // Sound constants, change these to modify sound behaviour
+// ANGRY
 const float basePlayspeed = 30.0;
 #define baseRandomPeriod 200 // ms per random period
 #define randomPeriodRange 100
@@ -54,17 +56,43 @@ const float basePlayspeed = 30.0;
 #define twitchLength 300
 #define twitchFactor 10.0
 #define twitchEvaluationRate 100 //ms evaluate if new twich
-#define twitchProbability 3 // 1 / 10
-int twitching = 0;
+#define twitchProbability 3 // 30%
+#define baseSilentPeriod 0
+#define silentPeriodRange 0
+#define singleMode 0
 
-// Happy and talkative
-//baseRandomPeriod 1000
-//randomPeriodRange 0
-//playspeed 2.0
-//speedChangeFactor 1.0
-//measureFactor 10
-//randomPeriod 1000
-//lowPassCutoff 400
+// HAPPY AND TALKATIVE
+//const float basePlayspeed = 4.0;
+//#define baseRandomPeriod 1000 // ms per random period
+//#define randomPeriodRange 50
+//#define lowPassResonance 200 // Amount of resonance, between 1 and 255, where 1 is max and 255 min.
+//#define lowPassCutoff 600 // Cut off frequency for low pass filter
+//#define speedChangeFactor 1.0
+//#define measureFactor 10
+//#define twitchFactor 1.0 // How much playspeed to add per twitch period, set to 0 to disable twitching
+//#define twitchLength 300
+//#define twitchEvaluationRate 100 //ms evaluate if new twich
+//#define twitchProbability 3 // 30%
+//#define baseSilentPeriod 0
+//#define silentPeriodRange 0
+//#define singleMode 0
+
+// PASSIVE
+//const float basePlayspeed = 2.0;
+//#define baseRandomPeriod 1000 // ms per random period
+//#define randomPeriodRange 50
+//#define lowPassResonance 200 // Amount of resonance, between 1 and 255, where 1 is max and 255 min.
+//#define lowPassCutoff 800 // Cut off frequency for low pass filter
+//#define speedChangeFactor 0.5
+//#define measureFactor 10
+//#define twitchFactor 10.0 // How much playspeed to add per twitch period, set to 0 to disable twitching
+//#define twitchLength 300
+//#define twitchEvaluationRate 500 //ms evaluate if new twich
+//#define twitchProbability 3 // 30%
+//#define baseSilentPeriod 500
+//#define silentPeriodRange 500
+//#define singleMode 1
+
 
 // Variables used by program *don't modify*
 volatile double cm = 0.0;
@@ -74,6 +102,9 @@ double lastCm = 0.0;
 float playspeed = 0;
 float speedchange = 0;
 int randomPeriod = baseRandomPeriod;
+int silentPeriod = baseSilentPeriod;
+int twitching = 0;
+int silent = 0;
 
 void setup(){
   Serial.begin(9600);
@@ -92,6 +123,7 @@ void setup(){
   randomDelay.set(randomPeriod); // 1500 msec countdown, within resolution of CONTROL_RATE
   twitchDelay.set(twitchEvaluationRate);
   twitchTimer.set(twitchLength);
+  silentDelay.set(silentPeriod);
   
   svf.setResonance(lowPassResonance);
   svf.setCentreFreq(lowPassCutoff);
@@ -111,6 +143,11 @@ void chooseSpeedMod(){
     playspeed = playspeed + twitchFactor;
   }
   speedchange = (float)rand((char)-100,(char)100)/800 * speedChangeFactor;
+
+  if(singleMode && speedchange < 0){
+    // Only positive speedchange in single mode
+    speedchange = -speedchange;
+  }
 }
 
 
@@ -138,27 +175,37 @@ void updateControl(){
       twitching = 1;
       Serial.println("Start Twitch");
       playspeed = playspeed + twitchFactor;
+      if(singleMode){
+        aSample.setLoopingOn();
+      }
       twitchTimer.start();
     }
     twitchDelay.start();
-  }
-
-  if(twitching && twitchTimer.ready()){
+  } else if(twitching && twitchTimer.ready()){
     Serial.println("End Twitch");
     playspeed = playspeed - twitchFactor;
+    if(singleMode){
+      aSample.setLoopingOff();
+    }
     twitching = 0;
+  } else if(singleMode && silentDelay.ready()){
+    aSample.setLoopingOff();
+    aSample.start();
+    silent = 1 - silent;
+    silentPeriod = baseSilentPeriod + rand(-silentPeriodRange,silentPeriodRange);
+    silentDelay.set(silentPeriod);
+    Serial.println(silentPeriod);
+    silentDelay.start();
   }
   
   
   playspeed += speedchange;
-  
-//  if(twitching){
-//    playspeedmod = playspeedmod + twitchFactor;
-//  }
-  
-  Serial.println(playspeed);
-  aSample.setFreq(playspeed);
-  
+//  Serial.println(playspeed);
+  if(singleMode && silent){
+    aSample.setFreq(0);
+  }else{
+    aSample.setFreq(playspeed);  
+  }
 }
 
 
