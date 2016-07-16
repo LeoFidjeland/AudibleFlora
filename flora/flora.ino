@@ -22,64 +22,60 @@
 #include <mozzi_rand.h>
 #include <StateVariable.h>
 
+// Wiring
+#define trigPin 4
+#define echoPin 2
+//int soundPin = 9; //Constant in Mozzi
+
+// Constants
 #define CONTROL_RATE 128
+#define MIN_CM 10.0
+#define MAX_CM 250.0
+#define triggerDelayTime 64 // Ultrasound trigger pulse length
+#define measurementPeriod 200 //ms between each ultrasound measurement
 
-int trigPin = 4;
-int echoPin = 2;
-
-double minCM = 10.0;
-double maxCM = 250.0;
+// Variables used by program *don't modify*
+volatile double cm = 0.0;
 long startTime = 0;
 long endTime = 0;
 double lastCm = 0.0;
-volatile double cm = 0.0;
-
-//FILTER//
-StateVariable <LOWPASS> svf; //möjliga filtertyper: LOWPASS/HIGHPASS/BANDPASS/NOTCH
-
-
-const float playspeed = 4.0;
 float playspeedmod = 0;
 float speedchange = 0;
 
-const unsigned int full = (int) (1000.f/playspeed) - 23; // adjustment approx for CONTROL_RATE difference
-
-// use: Sample <table_size, update_rate> SampleName (wavetable)
+// Objects
+StateVariable <LOWPASS> svf; //möjliga filtertyper: LOWPASS/HIGHPASS/BANDPASS/NOTCH
 Sample <kluck_NUM_CELLS, AUDIO_RATE> aSample(kluck_DATA);
-
-// for scheduling sample start
-EventDelay kTriggerDelay;
-
-// for scheduling trigger pulse
+EventDelay randomDelay;
+EventDelay measurementDelay;
 EventDelay triggerDelay;
-EventDelay outputDelay;
 
-long measureTime = 0;
+// Sound constants, change these to modify sound behaviour
+const float playspeed = 2.0;
+#define randomPeriod 1000 // ms per random period
+#define lowPassResonance 200 // Amount of resonance, between 1 and 255, where 1 is max and 255 min.
+#define lowPassCutoff 400 // Cut off frequency for low pass filter
+#define speedChangeFactor 1.0
+#define measureFactor 10
 
 void setup(){
 //  Serial.begin(9600);
-//  while (!Serial.available()) {
-//    Serial.println("Press any key to start.");
-//    delay (1000);
-//  }
-//  Serial.println("Starting");
 
   // Setup ultrasound ISR
   pinMode(trigPin,OUTPUT);
   pinMode(echoPin,INPUT);
   attachInterrupt(digitalPinToInterrupt(echoPin), echoISR, CHANGE);
-  triggerDelay.set(64);
-  outputDelay.set(200);
+  triggerDelay.set(triggerDelayTime);
+  measurementDelay.set(measurementPeriod);
 
   // Setup Mozzi
   randSeed(); // reseed the random generator for different results each time the sketch runs
   aSample.setFreq(playspeed*((float) kluck_SAMPLERATE / (float) kluck_NUM_CELLS));
   aSample.setLoopingOn();
-//  kTriggerDelay.set(full);
-  kTriggerDelay.set(100); // 1500 msec countdown, within resolution of CONTROL_RATE
+  randomDelay.set(randomPeriod); // 1500 msec countdown, within resolution of CONTROL_RATE
+  
+  svf.setResonance(lowPassResonance);
+  svf.setCentreFreq(lowPassCutoff);
   startMozzi(CONTROL_RATE);
-  svf.setResonance(200);
-  svf.setCentreFreq(400);
 }
 
 void chooseSpeedMod(){
@@ -88,39 +84,27 @@ void chooseSpeedMod(){
     cmChange = lastCm - cm;
     lastCm = cm; 
   }
-  cmChange = cmChange / 10;
+  cmChange = cmChange / measureFactor;
 //  Serial.println(cmChange);
   playspeedmod = playspeed + cmChange;
-  
-  
-//  if (rand((byte)1) == 0){
-    speedchange = (float)rand((char)-100,(char)100)/800;
-//    Serial.println(speedchange);
-//    float startspeed = (float)rand((char)-100,(char)100)/100;
-//    Serial.println(startspeed);
-//    Serial.println();
-//    playspeedmod = playspeed + startspeed;
-//  }
-//  else{
-//    speedchange = 0;
-//    playspeedmod = playspeed;
-//  }
-//  Serial.println(speedchange);
+  speedchange = (float)rand((char)-100,(char)100)/800 * speedChangeFactor;
 }
 
 
 
 void updateControl(){
-  if(kTriggerDelay.ready()){
+  if(randomDelay.ready()){
+    // Initiate a new random period for audio
     chooseSpeedMod();
-    kTriggerDelay.start();
-  }else if (outputDelay.ready()){
+    randomDelay.start();
+  }else if (measurementDelay.ready()){
+    // Initiate a new ultrasound measurement by sending a pulse on the trig pin
     digitalWrite(trigPin, HIGH);
     triggerDelay.start();
 //    Serial.println(startTime);
 //    Serial.println(endTime);
 //    Serial.println(cm);
-    outputDelay.start();
+    measurementDelay.start();
   }else if (triggerDelay.ready()){
     digitalWrite(trigPin, LOW);
   }
@@ -146,12 +130,11 @@ void echoISR(){
     endTime = mozziMicros();
     long duration = endTime - startTime;
     double distance = duration / 29.0 / 2.0;
-    if (distance < minCM || distance > maxCM){
+    if (distance < MIN_CM || distance > MAX_CM){
       cm = -1.0;
     }else{
       cm = distance;
     }
-//    detachInterrupt(digitalPinToInterrupt(echoPin));
   }
 }
 
