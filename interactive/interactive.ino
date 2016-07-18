@@ -77,15 +77,18 @@
 // Constants
 #define CONTROL_RATE 128
 #define MIN_CM 2.0
-#define MAX_CM 210.0
+#define MAX_CM 400.0
 #define triggerDelayTime 64 // Ultrasound trigger pulse length
 #define measurementPeriod 200 //ms between each ultrasound measurement
 #define measurementSmoothing 0.975f
+#define backgroundSmoothing 0.999f
 
 // Objects
 StateVariable <LOWPASS> svf; //möjliga filtertyper: LOWPASS/HIGHPASS/BANDPASS/NOTCH
 Sample <kluck_NUM_CELLS, AUDIO_RATE> aSample(kluck_DATA);
 Smooth <float> aSmoothActivity(measurementSmoothing);
+Smooth <float> backgroundLevelSmooth(backgroundSmoothing);
+float backgroundLevel = MAX_CM;
 
 // Timers, on every iteration:
 EventDelay randomDelay;      // the speedchange variable is randomized, producing a "changing" sound
@@ -168,7 +171,7 @@ int silent = 0;
 
 
 void setup(){
-//  Serial.begin(9600);
+  Serial.begin(9600);
 
   // Setup ultrasound ISR
   pinMode(trigPin,OUTPUT);
@@ -185,6 +188,15 @@ void setup(){
   twitchDelay.set(twitchEvaluationRate);
   twitchTimer.set(twitchLength);
   silentDelay.set(silentPeriod);
+
+  // Fill up the backgroundlevel smooth filter
+  backgroundLevelSmooth.setSmoothness(0);
+  backgroundLevelSmooth.next(MAX_CM);
+  backgroundLevelSmooth.setSmoothness(backgroundSmoothing);
+
+  aSmoothActivity.setSmoothness(0);
+  aSmoothActivity.next(0);
+  aSmoothActivity.setSmoothness(measurementSmoothing);
   
   svf.setResonance(lowPassResonance);
   svf.setCentreFreq(lowPassCutoff);
@@ -217,8 +229,8 @@ void chooseSpeedMod(){
 
 void reactToMeasurement(){
   if(cm != -1){
-    distanceFactor = 1 - (cm - MIN_CM) / (MAX_CM - MIN_CM);
-    activityFactor = abs((lastCm - cm) / (MAX_CM - MIN_CM));
+    distanceFactor = 1 - (cm - MIN_CM) / (backgroundLevel - MIN_CM);
+    activityFactor = abs((lastCm - cm) / (backgroundLevel - MIN_CM));
 
     //Summarize the last measurements
     activityFloats[activityIndex] = activityFactor;
@@ -232,6 +244,10 @@ void reactToMeasurement(){
       slowActivityFactor += activityFloats[k];
     }
 
+    if(slowActivityFactor < 0.1){
+      backgroundLevel = backgroundLevelSmooth.next(cm);
+    }
+
     totalActivity = (distanceFactor + activityFactor + slowActivityFactor ) / 1;
     lastCm = cm;
   }
@@ -241,7 +257,7 @@ void reactToMeasurement(){
 
 void updateControl(){
   if(randomDelay.ready()){
-    // Initiate a new random period for audio
+    // Initiate a new random period for base clicks
     chooseSpeedMod();
     randomPeriod = baseRandomPeriod + rand((char)-randomPeriodRange,(char)randomPeriodRange);
     randomDelay.set(randomPeriod);
@@ -253,9 +269,12 @@ void updateControl(){
     triggerDelay.start();
     measurementDelay.start();
   }else if (triggerDelay.ready()){
+    // End of measurement period
     digitalWrite(trigPin, LOW);
   }else if(twitchDelay.ready()){
+    // Here we use an evaluation timer and a fixed probability to produce an event with low occurance and high variance
     if(rand((byte)twitchProbability) == 0){
+      // If we have a new twitch
       twitching = 1;
       twitchTimer.start();
     }
