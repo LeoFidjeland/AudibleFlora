@@ -66,7 +66,7 @@ const float basePlayspeed = 30.0;
 //#define baseRandomPeriod 1000 // ms per random period
 //#define randomPeriodRange 50
 //#define lowPassResonance 200 // Amount of resonance, between 1 and 255, where 1 is max and 255 min.
-//#define lowPassCutoff 600 // Cut off frequency for low pass filter
+//#define lowPassCutoff 800 // Cut off frequency for low pass filter
 //#define speedChangeFactor 1.0
 //#define measureFactor 10
 //#define twitchFactor 1.0 // How much playspeed to add per twitch period, set to 0 to disable twitching
@@ -78,7 +78,7 @@ const float basePlayspeed = 30.0;
 //#define singleMode 0
 
 // PASSIVE
-//const float basePlayspeed = 2.0;
+//const float basePlayspeed = 1.0;
 //#define baseRandomPeriod 1000 // ms per random period
 //#define randomPeriodRange 50
 //#define lowPassResonance 200 // Amount of resonance, between 1 and 255, where 1 is max and 255 min.
