@@ -128,19 +128,32 @@ EventDelay silentDelay;      // in low activity, every sample is spaced out with
 #define passiveTwitchEvaluationRate 10000 //ms evaluate if new twich
 #define passiveBaseSilentPeriod 2000
 #define passiveSilentPeriodRange 500
-bool singleMode = true;
 
+
+// Variables used by program *don't modify*
+// Ultrasound related
+volatile float cm = 0.0;
+long startTime = 0;
+long endTime = 0;
+float lastCm = 0.0;
+//MOVEMENT
+float distanceFactor = 0.0;
+float activityFactor = 0.0;
+#define activityCounts 5
+float activityFloats[activityCounts] = {0.0};
+int activityIndex = 0;
+float slowActivityFactor = 0.0;
+float totalActivity = 0.0;
+float smoothed_activity = 0.0;
+
+
+bool singleMode = true;
 int twitchEvaluationRate = passiveTwitchEvaluationRate;
 int silentPeriodRange = passiveSilentPeriodRange;
 int baseSilentPeriod = passiveBaseSilentPeriod;
 float speedChangeFactor = passiveSpeedChangeFactor;
 float twitchFactor = passiveTwitchFactor;
 
-// Variables used by program *don't modify*
-volatile float cm = 0.0;
-long startTime = 0;
-long endTime = 0;
-float lastCm = 0.0;
 
 float baseSpeed = 0.0;
 float addSpeed = 0.0;
@@ -152,20 +165,10 @@ int randomPeriod = baseRandomPeriod;
 int silentPeriod = baseSilentPeriod;
 int twitching = 0;
 int silent = 0;
-//MOVEMENT
-float distanceFactor = 0.0;
-float activityFactor = 0.0;
-#define activityCounts 5
-float activityFloats[activityCounts] = {0.0};
-int activityIndex = 0;
-float slowActivityFactor = 0.0;
-float totalActivity = 0.0;
-float smoothed_activity = 0.0;
+
 
 void setup(){
-#ifdef DEBUG
-  Serial.begin(9600);
-#endif
+//  Serial.begin(9600);
 
   // Setup ultrasound ISR
   pinMode(trigPin,OUTPUT);
@@ -230,10 +233,7 @@ void reactToMeasurement(){
     }
 
     totalActivity = (distanceFactor + activityFactor + slowActivityFactor ) / 1;
-    
     lastCm = cm;
-    //  Serial.println(distanceFactor);
-//    Serial.println(totalActivity);
   }
 }
 
@@ -244,35 +244,26 @@ void updateControl(){
     // Initiate a new random period for audio
     chooseSpeedMod();
     randomPeriod = baseRandomPeriod + rand((char)-randomPeriodRange,(char)randomPeriodRange);
-//    Serial.println(randomPeriod);
     randomDelay.set(randomPeriod);
     randomDelay.start();
   }else if (measurementDelay.ready()){
     // Initiate a new ultrasound measurement by sending a pulse on the trig pin
-//  Serial.println(smoothed_activity);
     reactToMeasurement();
     digitalWrite(trigPin, HIGH);
     triggerDelay.start();
-//    Serial.println(startTime);
-//    Serial.println(endTime);
-//    Serial.println(cm);
     measurementDelay.start();
   }else if (triggerDelay.ready()){
     digitalWrite(trigPin, LOW);
   }else if(twitchDelay.ready()){
     if(rand((byte)twitchProbability) == 0){
       twitching = 1;
-      Serial.println("Start Twitch");
       twitchTimer.start();
     }
     twitchEvaluationRate = happyTwitchEvaluationRate + (float)(passiveTwitchEvaluationRate - happyTwitchEvaluationRate) * (1.0 - smoothed_activity / 3.0);
     if (twitchEvaluationRate < happyTwitchEvaluationRate) twitchEvaluationRate = happyTwitchEvaluationRate;
-//    Serial.println(smoothed_activity);
-//    Serial.println(twitchEvaluationRate);
     twitchDelay.set(twitchEvaluationRate);
     twitchDelay.start();
   } else if(twitching && twitchTimer.ready()){
-    Serial.println("End Twitch");
     twitching = 0;
   } else if(singleMode && silentDelay.ready()){
     aSample.start();
@@ -280,7 +271,6 @@ void updateControl(){
     baseSilentPeriod = passiveBaseSilentPeriod * (1 - smoothed_activity);
     silentPeriodRange = passiveSilentPeriodRange * (1 - smoothed_activity);
     silentPeriod = baseSilentPeriod + rand(-silentPeriodRange,silentPeriodRange);
-    Serial.println(silentPeriod);
     silentDelay.set(silentPeriod);
     silentDelay.start();
   }
@@ -319,6 +309,24 @@ void loop(){
   audioHook();
 }
 
+/*
+ * 
+ *
+ * Ultrasonic ranging module HC - SR04 
+ * 
+ * provides 2cm - 400cm non-contact measurement function, the ranging accuracy can reach to 3mm.
+ * The modules includes ultrasonic transmitters, receiver and control circuit. 
+ * 
+ * The basic principle of work:
+ * 
+ * (1) Using IO trigger for at least 10us high level signal,
+ * (2) The Module automatically sends eight 40 kHz and detect whether there is a pulse signal back.
+ * (3) IF the signal back, through high level , time of high output IO duration is the time from 
+ *     sending ultrasonic to returning.
+ *     
+ *     Test distance = high level time × velocity of sound (340M/S) / 2
+ * 
+ */
 void echoISR(){
   if(digitalRead(echoPin) == HIGH){
     startTime = mozziMicros();
