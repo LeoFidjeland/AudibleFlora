@@ -2,7 +2,7 @@
  *   
  *  The sound is based on a single sample (of a dolphin click) that is played in different speed and interval.
  *  
- *  There are 3 base "moods" that the sound can have: passive, happy and angry.
+ *  There are 3 base "moods" that the sound can have: passive, active and angry.
  *  Based on sensor readings from an ultrasound sensor measuring distance to a human, the sound changes between happy and passive.
  *  Based on the presence of poisonous gases, the angry mode is turned on.
  *  
@@ -72,6 +72,8 @@
 // Wiring
 #define trigPin 4
 #define echoPin 2
+#define gasPin 3
+#define ledPin 15
 //int soundPin = 9; //Constant in Mozzi, cannot be changed
 
 // Constants
@@ -82,12 +84,14 @@
 #define measurementPeriod 200 //ms between each ultrasound measurement
 #define measurementSmoothing 0.975f
 #define backgroundSmoothing 0.999f
+#define gasSmoothing 0.95f
 
 // Objects
 StateVariable <LOWPASS> svf; //möjliga filtertyper: LOWPASS/HIGHPASS/BANDPASS/NOTCH
 Sample <kluck_NUM_CELLS, AUDIO_RATE> aSample(kluck_DATA);
 Smooth <float> aSmoothActivity(measurementSmoothing);
 Smooth <float> backgroundLevelSmooth(backgroundSmoothing);
+Smooth <float> gasEffectSmooth(gasSmoothing);
 float backgroundLevel = MAX_CM;
 
 // Timers, on every iteration:
@@ -101,28 +105,29 @@ EventDelay silentDelay;      // in low activity, every sample is spaced out with
 // Sound constants, change these to modify sound behaviour
 // Global sound behaviour
 #define lowPassResonance 200  // Amount of resonance, between 1 and 255, where 1 is max and 255 min.
-#define lowPassCutoff 1200    // Cut off frequency for low pass filter
-#define baseRandomPeriod 1000 // ms per random period
-#define randomPeriodRange 50  // ms that random period can deviate from randomly
 #define twitchLength 300      // ms the length of a twitch
 #define twitchProbability 3   // [25%] probability that a twitch is triggered on a twitchDelay event
 
 // ANGRY
-//const float basePlayspeed = 30.0;
-//#define baseRandomPeriod 200 // ms per random period
-//#define randomPeriodRange 100
-//#define lowPassCutoff 3000 // Cut off frequency for low pass filter
-//#define speedChangeFactor 5.0
-//#define twitchFactor 10.0
-//#define twitchEvaluationRate 100 //ms evaluate if new twich
+#define angryBasePlayspeed 30.0
+#define angryBaseRandomPeriod 200 // ms per random period
+#define angryRandomPeriodRange 100
+#define angryLowPassCutoff 3000 // Cut off frequency for low pass filter
+#define angrySpeedChangeFactor 5.0
+#define angryTwitchFactor 10.0
 
-// HAPPY AND TALKATIVE
-#define happyBasePlayspeed 4.0
-#define happySpeedChangeFactor 1.0
-#define happyTwitchFactor 1.0 // How much playspeed to add per twitch period, set to 0 to disable twitching
-#define happyTwitchEvaluationRate 100 //ms evaluate if new twich
-#define happyBaseSilentPeriod 0
-#define happySilentPeriodRange 0
+// HAPPY (both active and passive)
+#define happyBaseRandomPeriod 1000
+#define happyRandomPeriodRange 50  // ms that random period can deviate from randomly
+#define happyLowPassCutoff 1200    // Cut off frequency for low pass filter
+
+// ACTIVE
+#define activeBasePlayspeed 4.0
+#define activeSpeedChangeFactor 1.0
+#define activeTwitchFactor 1.0 // How much playspeed to add per twitch period, set to 0 to disable twitching
+#define activeTwitchEvaluationRate 100 //ms evaluate if new twich
+#define activeBaseSilentPeriod 0
+#define activeSilentPeriodRange 0
 
 // PASSIVE
 #define passiveBasePlayspeed 1.0
@@ -136,6 +141,7 @@ EventDelay silentDelay;      // in low activity, every sample is spaced out with
 // Variables used by program *don't modify*
 // Ultrasound related
 volatile float cm = 0.0;
+volatile int gas = 0;
 long startTime = 0;
 long endTime = 0;
 float lastCm = 0.0;
@@ -148,7 +154,9 @@ int activityIndex = 0;
 float slowActivityFactor = 0.0;
 float totalActivity = 0.0;
 float smoothed_activity = 0.0;
-
+// GAS
+volatile float gasActive = 0.0;
+float gasEffect = 0.0;
 
 bool singleMode = true;
 int twitchEvaluationRate = passiveTwitchEvaluationRate;
@@ -164,10 +172,11 @@ float twitchSpeed = 0.0;
 float totalSpeed = 0.0;
 
 float speedchange = 0;
-int randomPeriod = baseRandomPeriod;
+int randomPeriod = happyBaseRandomPeriod;
 int silentPeriod = baseSilentPeriod;
 int twitching = 0;
 int silent = 0;
+int lowPassCutoff = happyLowPassCutoff;
 
 
 void setup(){
@@ -176,7 +185,10 @@ void setup(){
   // Setup ultrasound ISR
   pinMode(trigPin,OUTPUT);
   pinMode(echoPin,INPUT);
+  pinMode(gasPin, INPUT);
+  pinMode(ledPin, OUTPUT);
   attachInterrupt(digitalPinToInterrupt(echoPin), echoISR, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(gasPin), gasISR, CHANGE);
   triggerDelay.set(triggerDelayTime);
   measurementDelay.set(measurementPeriod);
 
@@ -189,17 +201,16 @@ void setup(){
   twitchTimer.set(twitchLength);
   silentDelay.set(silentPeriod);
 
-  // Fill up the backgroundlevel smooth filter
+  // Fill up the smooth filters
   backgroundLevelSmooth.setSmoothness(0);
   backgroundLevelSmooth.next(MAX_CM);
   backgroundLevelSmooth.setSmoothness(backgroundSmoothing);
-
   aSmoothActivity.setSmoothness(0);
   aSmoothActivity.next(0);
   aSmoothActivity.setSmoothness(measurementSmoothing);
   
   svf.setResonance(lowPassResonance);
-  svf.setCentreFreq(lowPassCutoff);
+  svf.setCentreFreq(happyLowPassCutoff);
   startMozzi(CONTROL_RATE);
 }
 
@@ -218,7 +229,8 @@ void chooseSpeedMod(){
 
   
   addSpeed = 0.0;
-  speedChangeFactor = happySpeedChangeFactor + (passiveSpeedChangeFactor - happySpeedChangeFactor) * (1 - smoothed_activity );
+  speedChangeFactor = activeSpeedChangeFactor + (passiveSpeedChangeFactor - activeSpeedChangeFactor) * (1 - smoothed_activity );
+  speedChangeFactor += angrySpeedChangeFactor * gasEffect;
   speedchange = (float)rand((char)-100,(char)100)/800 * speedChangeFactor;
 
   if(singleMode && speedchange < 0){
@@ -251,6 +263,9 @@ void reactToMeasurement(){
     totalActivity = (distanceFactor + activityFactor + slowActivityFactor ) / 1;
     lastCm = cm;
   }
+
+//  gas = analogRead(gasPin);
+//  Serial.println(gas);
 }
 
 
@@ -259,6 +274,8 @@ void updateControl(){
   if(randomDelay.ready()){
     // Initiate a new random period for base clicks
     chooseSpeedMod();
+    int baseRandomPeriod = happyBaseRandomPeriod + (int)((float)(angryBaseRandomPeriod - happyBaseRandomPeriod) * gasEffect);
+    int randomPeriodRange = happyRandomPeriodRange + (int)((float)(angryRandomPeriodRange - happyRandomPeriodRange) * gasEffect);
     randomPeriod = baseRandomPeriod + rand((char)-randomPeriodRange,(char)randomPeriodRange);
     randomDelay.set(randomPeriod);
     randomDelay.start();
@@ -276,10 +293,12 @@ void updateControl(){
     if(rand((byte)twitchProbability) == 0){
       // If we have a new twitch
       twitching = 1;
+      twitchFactor = passiveTwitchFactor + (activeTwitchFactor - passiveTwitchFactor) * (max(smoothed_activity + gasEffect, 1.0));
       twitchTimer.start();
     }
-    twitchEvaluationRate = happyTwitchEvaluationRate + (float)(passiveTwitchEvaluationRate - happyTwitchEvaluationRate) * (1.0 - smoothed_activity / 3.0);
-    if (twitchEvaluationRate < happyTwitchEvaluationRate) twitchEvaluationRate = happyTwitchEvaluationRate;
+    twitchEvaluationRate = activeTwitchEvaluationRate + (float)(passiveTwitchEvaluationRate - activeTwitchEvaluationRate) * (1.0 - smoothed_activity / 3.0);
+    if (twitchEvaluationRate < activeTwitchEvaluationRate) twitchEvaluationRate = activeTwitchEvaluationRate;
+    if (gasEffect > 0.6) twitchEvaluationRate = activeTwitchEvaluationRate;
     twitchDelay.set(twitchEvaluationRate);
     twitchDelay.start();
   } else if(twitching && twitchTimer.ready()){
@@ -294,13 +313,26 @@ void updateControl(){
     silentDelay.start();
   }
 
+  // Activity
   smoothed_activity = aSmoothActivity.next(totalActivity);
-  baseSpeed = passiveBasePlayspeed + (happyBasePlayspeed - passiveBasePlayspeed) * smoothed_activity;
+  gasEffect = gasEffectSmooth.next(gasActive);
+  baseSpeed = passiveBasePlayspeed + (activeBasePlayspeed - passiveBasePlayspeed) * smoothed_activity;  
   addSpeed += speedchange;
+  
   twitchSpeed = twitching ? twitchFactor : 0.0;
+
+  // Add the gas effect
+  baseSpeed += angryBasePlayspeed * gasEffect;
+
+  // Summarize
   totalSpeed = baseSpeed + addSpeed + twitchSpeed;
 
-  if(smoothed_activity < 0.6) {
+
+  // Set filter effect
+  lowPassCutoff = happyLowPassCutoff + (angryLowPassCutoff - happyLowPassCutoff) * gasEffect;
+  svf.setCentreFreq(lowPassCutoff);
+
+  if(smoothed_activity < 0.6 && gasEffect < 0.1) {
     singleMode = true;
   }else{
     singleMode = false;
@@ -358,6 +390,16 @@ void echoISR(){
     }else{
       cm = distance;
     }
+  }
+}
+
+void gasISR(){
+  if(digitalRead(gasPin) == HIGH){
+    gasActive = 1.0;
+    digitalWrite(ledPin, HIGH);
+  }else{
+    gasActive = 0.0;
+    digitalWrite(ledPin, LOW);
   }
 }
 
