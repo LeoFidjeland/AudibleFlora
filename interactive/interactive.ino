@@ -50,6 +50,10 @@
  *  
  *  ----------------------
  *  
+ *  NOTES
+ *  
+ *  Set the board to Arduino Leonardo to get the RX/TX Led pins correctly on the pro micro clone from Kjell & Company.
+ *  
  *  Summer 2016
  *  Linnea Våglund - concept
  *  Leo Fidjeland - programming
@@ -73,7 +77,6 @@
 #define trigPin 4
 #define echoPin 2
 #define gasPin 3
-#define ledPin 15
 //int soundPin = 9; //Constant in Mozzi, cannot be changed
 
 // Constants
@@ -186,11 +189,14 @@ void setup(){
   pinMode(trigPin,OUTPUT);
   pinMode(echoPin,INPUT);
   pinMode(gasPin, INPUT);
-  pinMode(ledPin, OUTPUT);
   attachInterrupt(digitalPinToInterrupt(echoPin), echoISR, CHANGE);
   attachInterrupt(digitalPinToInterrupt(gasPin), gasISR, CHANGE);
   triggerDelay.set(triggerDelayTime);
   measurementDelay.set(measurementPeriod);
+
+  // Turn off the lights
+  TXLED0;
+  RXLED0;
 
   // Setup Mozzi
   randSeed(); // reseed the random generator for different results each time the sketch runs
@@ -387,8 +393,10 @@ void echoISR(){
     float distance = duration / 29.41176 / 2.0;
     if (distance < MIN_CM || distance > MAX_CM){
       cm = -1.0;
+      TXLED0;
     }else{
       cm = distance;
+      TXLED1;
     }
   }
 }
@@ -396,10 +404,10 @@ void echoISR(){
 void gasISR(){
   if(digitalRead(gasPin) == HIGH){
     gasActive = 1.0;
-    digitalWrite(ledPin, HIGH);
+    RXLED1;
   }else{
     gasActive = 0.0;
-    digitalWrite(ledPin, LOW);
+    RXLED0;
   }
 }
 
