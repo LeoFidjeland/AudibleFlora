@@ -62,7 +62,9 @@
  *  MIT Licence
 */
 
+
 // Mozzi
+#include <ADC.h>
 #include <MozziGuts.h>
 #include <Sample.h>
 #include <EventDelay.h>
@@ -77,6 +79,7 @@
 #define trigPin 4
 #define echoPin 2
 #define gasPin 3
+#define ledPin 13
 //int soundPin = 9; //Constant in Mozzi, cannot be changed
 
 // Constants
@@ -187,6 +190,7 @@ void setup(){
 
   // Setup ultrasound ISR
   pinMode(trigPin,OUTPUT);
+  pinMode(ledPin,OUTPUT);
   pinMode(echoPin,INPUT);
   pinMode(gasPin, INPUT);
   attachInterrupt(digitalPinToInterrupt(echoPin), echoISR, CHANGE);
@@ -195,8 +199,7 @@ void setup(){
   measurementDelay.set(measurementPeriod);
 
   // Turn off the lights
-  TXLED0;
-  RXLED0;
+  digitalWrite(ledPin, LOW);
 
   // Setup Mozzi
   randSeed(); // reseed the random generator for different results each time the sketch runs
@@ -271,7 +274,7 @@ void reactToMeasurement(){
   }
 
 //  gas = analogRead(gasPin);
-//  Serial.println(gas);
+  Serial.println(cm);
 }
 
 
@@ -393,10 +396,10 @@ void echoISR(){
     float distance = duration / 29.41176 / 2.0;
     if (distance < MIN_CM || distance > MAX_CM){
       cm = -1.0;
-      TXLED0;
+      digitalWrite(ledPin, LOW);
     }else{
       cm = distance;
-      TXLED1;
+      digitalWrite(ledPin, HIGH);
     }
   }
 }
@@ -404,10 +407,12 @@ void echoISR(){
 void gasISR(){
   if(digitalRead(gasPin) == HIGH){
     gasActive = 1.0;
-    RXLED1;
+//    digitalWrite(ledPin, HIGH);
+//    RXLED1;
   }else{
     gasActive = 0.0;
-    RXLED0;
+//    digitalWrite(ledPin, LOW);
+//    RXLED0;
   }
 }
 
