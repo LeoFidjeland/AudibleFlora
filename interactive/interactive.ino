@@ -240,7 +240,7 @@ void chooseSpeedMod(){
   addSpeed = 0.0;
   speedChangeFactor = activeSpeedChangeFactor + (passiveSpeedChangeFactor - activeSpeedChangeFactor) * (1 - smoothed_activity );
   speedChangeFactor += angrySpeedChangeFactor * gasEffect;
-  speedchange = (float)rand((char)-100,(char)100)/800 * speedChangeFactor;
+  speedchange = (float)rand(-100, 100)/800 * speedChangeFactor;
 
   if(singleMode && speedchange < 0){
     // Only positive speedchange in single mode
@@ -285,7 +285,7 @@ void updateControl(){
     chooseSpeedMod();
     int baseRandomPeriod = happyBaseRandomPeriod + (int)((float)(angryBaseRandomPeriod - happyBaseRandomPeriod) * gasEffect);
     int randomPeriodRange = happyRandomPeriodRange + (int)((float)(angryRandomPeriodRange - happyRandomPeriodRange) * gasEffect);
-    randomPeriod = baseRandomPeriod + rand((char)-randomPeriodRange,(char)randomPeriodRange);
+    randomPeriod = baseRandomPeriod + rand(-randomPeriodRange, randomPeriodRange);
     randomDelay.set(randomPeriod);
     randomDelay.start();
   }else if (measurementDelay.ready()){
