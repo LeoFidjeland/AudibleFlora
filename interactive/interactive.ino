@@ -405,7 +405,7 @@ void echoISR(){
 }
 
 void gasISR(){
-  if(digitalRead(gasPin) == LOW){
+  if(digitalRead(gasPin) == LOW){//Active low
     gasActive = 1.0;
 //    digitalWrite(ledPin, HIGH);
 //    RXLED1;
