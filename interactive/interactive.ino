@@ -78,7 +78,7 @@
 // Wiring
 #define trigPin 4
 #define echoPin 2
-#define gasPin 3
+#define gasPin 7
 #define ledPin 13
 //int soundPin = 9; //Constant in Mozzi, cannot be changed
 
@@ -405,7 +405,7 @@ void echoISR(){
 }
 
 void gasISR(){
-  if(digitalRead(gasPin) == HIGH){
+  if(digitalRead(gasPin) == LOW){
     gasActive = 1.0;
 //    digitalWrite(ledPin, HIGH);
 //    RXLED1;
