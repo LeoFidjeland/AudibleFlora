@@ -62,7 +62,9 @@
  *  MIT Licence
 */
 
+
 // Mozzi
+#include <ADC.h>
 #include <MozziGuts.h>
 #include <Sample.h>
 #include <EventDelay.h>
@@ -76,7 +78,8 @@
 // Wiring
 #define trigPin 4
 #define echoPin 2
-#define gasPin 3
+#define gasPin 7
+#define ledPin 13
 //int soundPin = 9; //Constant in Mozzi, cannot be changed
 
 // Constants
@@ -187,6 +190,7 @@ void setup(){
 
   // Setup ultrasound ISR
   pinMode(trigPin,OUTPUT);
+  pinMode(ledPin,OUTPUT);
   pinMode(echoPin,INPUT);
   pinMode(gasPin, INPUT);
   attachInterrupt(digitalPinToInterrupt(echoPin), echoISR, CHANGE);
@@ -195,8 +199,7 @@ void setup(){
   measurementDelay.set(measurementPeriod);
 
   // Turn off the lights
-  TXLED0;
-  RXLED0;
+  digitalWrite(ledPin, LOW);
 
   // Setup Mozzi
   randSeed(); // reseed the random generator for different results each time the sketch runs
@@ -237,7 +240,7 @@ void chooseSpeedMod(){
   addSpeed = 0.0;
   speedChangeFactor = activeSpeedChangeFactor + (passiveSpeedChangeFactor - activeSpeedChangeFactor) * (1 - smoothed_activity );
   speedChangeFactor += angrySpeedChangeFactor * gasEffect;
-  speedchange = (float)rand((char)-100,(char)100)/800 * speedChangeFactor;
+  speedchange = (float)rand(-100, 100)/800 * speedChangeFactor;
 
   if(singleMode && speedchange < 0){
     // Only positive speedchange in single mode
@@ -271,7 +274,7 @@ void reactToMeasurement(){
   }
 
 //  gas = analogRead(gasPin);
-//  Serial.println(gas);
+  Serial.println(cm);
 }
 
 
@@ -282,7 +285,7 @@ void updateControl(){
     chooseSpeedMod();
     int baseRandomPeriod = happyBaseRandomPeriod + (int)((float)(angryBaseRandomPeriod - happyBaseRandomPeriod) * gasEffect);
     int randomPeriodRange = happyRandomPeriodRange + (int)((float)(angryRandomPeriodRange - happyRandomPeriodRange) * gasEffect);
-    randomPeriod = baseRandomPeriod + rand((char)-randomPeriodRange,(char)randomPeriodRange);
+    randomPeriod = baseRandomPeriod + rand(-randomPeriodRange, randomPeriodRange);
     randomDelay.set(randomPeriod);
     randomDelay.start();
   }else if (measurementDelay.ready()){
@@ -393,21 +396,23 @@ void echoISR(){
     float distance = duration / 29.41176 / 2.0;
     if (distance < MIN_CM || distance > MAX_CM){
       cm = -1.0;
-      TXLED0;
+      digitalWrite(ledPin, LOW);
     }else{
       cm = distance;
-      TXLED1;
+      digitalWrite(ledPin, HIGH);
     }
   }
 }
 
 void gasISR(){
-  if(digitalRead(gasPin) == HIGH){
+  if(digitalRead(gasPin) == LOW){
     gasActive = 1.0;
-    RXLED1;
+//    digitalWrite(ledPin, HIGH);
+//    RXLED1;
   }else{
     gasActive = 0.0;
-    RXLED0;
+//    digitalWrite(ledPin, LOW);
+//    RXLED0;
   }
 }
 
