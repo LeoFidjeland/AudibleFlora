@@ -88,6 +88,7 @@
 #define MAX_CM 400.0
 #define triggerDelayTime 64 // Ultrasound trigger pulse length
 #define measurementPeriod 200 //ms between each ultrasound measurement
+#define twitchEvaluationRate 100 //ms between each twitch evaluation
 #define measurementSmoothing 0.975f
 #define backgroundSmoothing 0.999f
 #define gasSmoothing 0.999f
@@ -112,7 +113,6 @@ EventDelay silentDelay;      // in low activity, every sample is spaced out with
 // Global sound behaviour
 #define lowPassResonance 200  // Amount of resonance, between 1 and 255, where 1 is max and 255 min.
 #define twitchLength 300      // ms the length of a twitch
-#define twitchProbability 3   // [25%] probability that a twitch is triggered on a twitchDelay event
 
 // ANGRY
 #define angryBasePlayspeed 30.0
@@ -131,7 +131,7 @@ EventDelay silentDelay;      // in low activity, every sample is spaced out with
 #define activeBasePlayspeed 4.0
 #define activeSpeedChangeFactor 1.0
 #define activeTwitchFactor 1.0 // How much playspeed to add per twitch period, set to 0 to disable twitching
-#define activeTwitchEvaluationRate 100 //ms evaluate if new twich
+#define activeTwitchProbability 3
 #define activeBaseSilentPeriod 0
 #define activeSilentPeriodRange 0
 
@@ -139,7 +139,7 @@ EventDelay silentDelay;      // in low activity, every sample is spaced out with
 #define passiveBasePlayspeed 1.0
 #define passiveSpeedChangeFactor 0.5
 #define passiveTwitchFactor 10.0 // How much playspeed to add per twitch period, set to 0 to disable twitching
-#define passiveTwitchEvaluationRate 10000 //ms evaluate if new twich
+#define passiveTwitchProbability 300
 #define passiveBaseSilentPeriod 2000
 #define passiveSilentPeriodRange 500
 
@@ -165,11 +165,11 @@ float gasEffect = 0.0;
 float gasSmooth = 0.0;
 
 bool singleMode = true;
-int twitchEvaluationRate = passiveTwitchEvaluationRate;
 int silentPeriodRange = passiveSilentPeriodRange;
 int baseSilentPeriod = passiveBaseSilentPeriod;
 float speedChangeFactor = passiveSpeedChangeFactor;
 float twitchFactor = passiveTwitchFactor;
+int twitchProbability = passiveTwitchProbability;
 
 
 float baseSpeed = 0.0;
@@ -302,13 +302,11 @@ void updateControl(){
     if(rand((byte)twitchProbability) == 0){
       // If we have a new twitch
       twitching = 1;
-      twitchFactor = passiveTwitchFactor + (activeTwitchFactor - passiveTwitchFactor) * (max(smoothed_activity + gasEffect, 1.0));
+      twitchFactor = passiveTwitchFactor + (activeTwitchFactor - passiveTwitchFactor) * (min(smoothed_activity / 1.5 + gasEffect, 1.0));
       twitchTimer.start();
     }
-    twitchEvaluationRate = activeTwitchEvaluationRate + (float)(passiveTwitchEvaluationRate - activeTwitchEvaluationRate) * (1.0 - smoothed_activity / 3.0);
-    if (twitchEvaluationRate < activeTwitchEvaluationRate) twitchEvaluationRate = activeTwitchEvaluationRate;
-    if (gasEffect > 0.6) twitchEvaluationRate = activeTwitchEvaluationRate;
-    twitchDelay.set(twitchEvaluationRate);
+    twitchProbability = passiveTwitchProbability + (activeTwitchProbability - passiveTwitchProbability) * (smoothed_activity / 1.2);
+    if (twitchProbability < activeTwitchProbability) twitchProbability = activeTwitchProbability;
     twitchDelay.start();
   } else if(twitching && twitchTimer.ready()){
     twitching = 0;
