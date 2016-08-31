@@ -92,6 +92,7 @@
 #define measurementSmoothing 0.975f
 #define backgroundSmoothing 0.999f
 #define gasSmoothing 0.999f
+#define gasAttack 0.99f
 
 // Objects
 StateVariable <LOWPASS> svf; //möjliga filtertyper: LOWPASS/HIGHPASS/BANDPASS/NOTCH
@@ -162,7 +163,6 @@ float smoothed_activity = 0.0;
 // GAS
 volatile float gasActive = 0.0;
 float gasEffect = 0.0;
-float gasSmooth = 0.0;
 
 bool singleMode = true;
 int silentPeriodRange = passiveSilentPeriodRange;
@@ -217,6 +217,9 @@ void setup(){
   aSmoothActivity.setSmoothness(0);
   aSmoothActivity.next(0);
   aSmoothActivity.setSmoothness(measurementSmoothing);
+  gasEffectSmooth.setSmoothness(0);
+  gasEffectSmooth.next(0);
+  gasEffectSmooth.setSmoothness(gasSmoothing);
   
   svf.setResonance(lowPassResonance);
   svf.setCentreFreq(happyLowPassCutoff);
@@ -322,8 +325,7 @@ void updateControl(){
 
   // Activity
   smoothed_activity = aSmoothActivity.next(totalActivity);
-  gasSmooth = gasEffectSmooth.next(gasActive);
-  gasEffect = max(gasSmooth, gasActive);
+  gasEffect = gasEffectSmooth.next(gasActive);
   baseSpeed = passiveBasePlayspeed + (activeBasePlayspeed - passiveBasePlayspeed) * smoothed_activity;  
   addSpeed += speedchange;
   
@@ -406,7 +408,7 @@ void echoISR(){
 void gasISR(){
   if(digitalRead(gasPin) == LOW){//Active low
     gasActive = 1.0;
-    gasEffectSmooth.setSmoothness(0);
+    gasEffectSmooth.setSmoothness(gasAttack);
 //    digitalWrite(ledPin, HIGH);
 //    RXLED1;
   }else{
