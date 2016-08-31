@@ -396,7 +396,7 @@ void echoISR(){
     long duration = endTime - startTime;
     float distance = duration / 29.41176 / 2.0;
     if (distance < MIN_CM || distance > MAX_CM){
-      cm = -1.0;
+      cm = backgroundLevel;
       digitalWrite(ledPin, HIGH);
     }else{
       cm = distance;
