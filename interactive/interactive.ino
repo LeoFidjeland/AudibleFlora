@@ -112,7 +112,7 @@ EventDelay silentDelay;      // in low activity, every sample is spaced out with
 
 // Sound constants, change these to modify sound behaviour
 // Global sound behaviour
-#define lowPassResonance 150  // Amount of resonance, between 1 and 255, where 1 is max and 255 min.
+#define lowPassResonance 200  // Amount of resonance, between 1 and 255, where 1 is max and 255 min.
 #define twitchLength 300      // ms the length of a twitch
 
 // ANGRY
