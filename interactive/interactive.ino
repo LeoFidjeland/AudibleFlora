@@ -397,10 +397,10 @@ void echoISR(){
     float distance = duration / 29.41176 / 2.0;
     if (distance < MIN_CM || distance > MAX_CM){
       cm = -1.0;
-      digitalWrite(ledPin, LOW);
+      digitalWrite(ledPin, HIGH);
     }else{
       cm = distance;
-      digitalWrite(ledPin, HIGH);
+      digitalWrite(ledPin, LOW);
     }
   }
 }
