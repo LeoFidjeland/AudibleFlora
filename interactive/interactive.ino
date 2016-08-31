@@ -90,7 +90,7 @@
 #define measurementPeriod 200 //ms between each ultrasound measurement
 #define measurementSmoothing 0.975f
 #define backgroundSmoothing 0.999f
-#define gasSmoothing 0.95f
+#define gasSmoothing 0.999f
 
 // Objects
 StateVariable <LOWPASS> svf; //möjliga filtertyper: LOWPASS/HIGHPASS/BANDPASS/NOTCH
@@ -147,7 +147,6 @@ EventDelay silentDelay;      // in low activity, every sample is spaced out with
 // Variables used by program *don't modify*
 // Ultrasound related
 volatile float cm = 0.0;
-volatile int gas = 0;
 long startTime = 0;
 long endTime = 0;
 float lastCm = 0.0;
@@ -163,6 +162,7 @@ float smoothed_activity = 0.0;
 // GAS
 volatile float gasActive = 0.0;
 float gasEffect = 0.0;
+float gasSmooth = 0.0;
 
 bool singleMode = true;
 int twitchEvaluationRate = passiveTwitchEvaluationRate;
@@ -324,7 +324,8 @@ void updateControl(){
 
   // Activity
   smoothed_activity = aSmoothActivity.next(totalActivity);
-  gasEffect = gasEffectSmooth.next(gasActive);
+  gasSmooth = gasEffectSmooth.next(gasActive);
+  gasEffect = max(gasSmooth, gasActive);
   baseSpeed = passiveBasePlayspeed + (activeBasePlayspeed - passiveBasePlayspeed) * smoothed_activity;  
   addSpeed += speedchange;
   
@@ -407,10 +408,12 @@ void echoISR(){
 void gasISR(){
   if(digitalRead(gasPin) == LOW){//Active low
     gasActive = 1.0;
+    gasEffectSmooth.setSmoothness(0);
 //    digitalWrite(ledPin, HIGH);
 //    RXLED1;
   }else{
     gasActive = 0.0;
+    gasEffectSmooth.setSmoothness(gasSmoothing);
 //    digitalWrite(ledPin, LOW);
 //    RXLED0;
   }
